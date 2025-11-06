@@ -8,10 +8,10 @@
 
 # Compiler and tools
 # On macOS, install cross-compiler: brew install i686-elf-gcc i686-elf-binutils
-# Then use: CC=i686-elf-gcc AS=i686-elf-as LD=i686-elf-ld make
-CC ?= gcc                          # C compiler (use i686-elf-gcc on macOS)
-AS ?= as                           # Assembler (use i686-elf-as on macOS)
-LD ?= ld                           # Linker (use i686-elf-ld on macOS)
+# Auto-detect cross-compiler if available
+CC := $(shell command -v i686-elf-gcc 2>/dev/null || echo gcc)
+AS := $(shell command -v i686-elf-as 2>/dev/null || echo as)
+LD := $(shell command -v i686-elf-ld 2>/dev/null || echo ld)
 # GRUB tool - try i686-elf-grub-mkrescue first (for macOS), fallback to grub-mkrescue
 GRUB_MKRESCUE ?= $(shell command -v i686-elf-grub-mkrescue 2>/dev/null || command -v grub-mkrescue 2>/dev/null || echo grub-mkrescue)
 
@@ -53,12 +53,19 @@ CFLAGS += -fno-pie                 # No position-independent executable
 ifeq ($(findstring x86_64-elf-as,$(AS)),x86_64-elf-as)
 $(error ERROR: x86_64-elf-as cannot assemble 32-bit code. Please install i686-elf toolchain: brew install i686-elf-gcc i686-elf-binutils)
 endif
-ASFLAGS = --32                     # 32-bit mode (requires i686-elf-as or native as)
+# Assembler flags - only use --32 for cross-compiler
+ASFLAGS = 
+ifeq ($(findstring i686-elf-as,$(AS)),i686-elf-as)
+    ASFLAGS += --32
+endif
 
 # Linker flags
-LDFLAGS = -m elf_i386              # 32-bit ELF format
-LDFLAGS += -T linker.ld            # Use our linker script
+LDFLAGS = -T linker.ld            # Use our linker script
 LDFLAGS += -nostdlib               # No standard library
+# Add -m elf_i386 if using cross-compiler (i686-elf-ld)
+ifeq ($(findstring i686-elf-ld,$(LD)),i686-elf-ld)
+    LDFLAGS += -m elf_i386
+endif
 
 # Directories
 SRC_DIR := src
@@ -70,12 +77,16 @@ BOOT_SRC := $(SRC_DIR)/boot.S
 KERNEL_SRC := $(SRC_DIR)/kernel.c
 KEYBOARD_SRC := $(SRC_DIR)/keyboard.c
 MEMORY_SRC := $(SRC_DIR)/memory.c
+GRAPHICS_SRC := $(SRC_DIR)/graphics.c
+NEBULA_UI_SRC := $(SRC_DIR)/nebula_ui.c
 
 # Object files
 BOOT_OBJ := $(BUILD_DIR)/boot.o
 KERNEL_OBJ := $(BUILD_DIR)/kernel.o
 KEYBOARD_OBJ := $(BUILD_DIR)/keyboard.o
 MEMORY_OBJ := $(BUILD_DIR)/memory.o
+GRAPHICS_OBJ := $(BUILD_DIR)/graphics.o
+NEBULA_UI_OBJ := $(BUILD_DIR)/nebula_ui.o
 
 # Output files
 KERNEL_BIN = $(ISO_DIR)/boot/kernel.bin  # Kernel binary
@@ -87,6 +98,8 @@ all: $(ISO_FILE)
 # Build ISO file
 $(ISO_FILE): $(KERNEL_BIN)
 	@echo "Creating ISO..."
+	@mkdir -p $(ISO_DIR)/boot/grub
+	@printf 'menuentry "NEBULA OS" {\n    multiboot /boot/kernel.bin\n    boot\n}\n' > $(ISO_DIR)/boot/grub/grub.cfg
 	$(GRUB_MKRESCUE) -o $(ISO_FILE) $(ISO_DIR)
 
 # Build kernel binary
@@ -96,10 +109,10 @@ $(KERNEL_BIN): $(BUILD_DIR)/kernel.bin
 	cp $(BUILD_DIR)/kernel.bin $(KERNEL_BIN)
 
 # Link kernel binary from object files
-$(BUILD_DIR)/kernel.bin: $(BOOT_OBJ) $(KERNEL_OBJ) $(KEYBOARD_OBJ) $(MEMORY_OBJ)
+$(BUILD_DIR)/kernel.bin: $(BOOT_OBJ) $(KERNEL_OBJ) $(KEYBOARD_OBJ) $(MEMORY_OBJ) $(GRAPHICS_OBJ) $(NEBULA_UI_OBJ)
 	@echo "Linking kernel..."
 	@mkdir -p $(BUILD_DIR)
-	$(LD) $(LDFLAGS) -o $(BUILD_DIR)/kernel.bin $(BOOT_OBJ) $(KERNEL_OBJ) $(KEYBOARD_OBJ) $(MEMORY_OBJ)
+	$(LD) $(LDFLAGS) -o $(BUILD_DIR)/kernel.bin $(BOOT_OBJ) $(KERNEL_OBJ) $(KEYBOARD_OBJ) $(MEMORY_OBJ) $(GRAPHICS_OBJ) $(NEBULA_UI_OBJ)
 
 # Compile bootloader
 $(BUILD_DIR)/boot.o: $(SRC_DIR)/boot.S
@@ -125,24 +138,38 @@ $(BUILD_DIR)/memory.o: $(SRC_DIR)/memory.c
 	@mkdir -p $(BUILD_DIR)
 	$(CC) $(CFLAGS) -I$(SRC_DIR) -c -o $(BUILD_DIR)/memory.o $(SRC_DIR)/memory.c
 
+# Compile graphics subsystem
+$(BUILD_DIR)/graphics.o: $(SRC_DIR)/graphics.c
+	@echo "Compiling graphics subsystem..."
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -c -o $(BUILD_DIR)/graphics.o $(SRC_DIR)/graphics.c
+
+# Compile NEBULA UI
+$(BUILD_DIR)/nebula_ui.o: $(SRC_DIR)/nebula_ui.c
+	@echo "Compiling NEBULA UI..."
+	@mkdir -p $(BUILD_DIR)
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -c -o $(BUILD_DIR)/nebula_ui.o $(SRC_DIR)/nebula_ui.c
+
 # Run in QEMU
 # Try to find qemu-system-i386 in common locations
 QEMU := $(shell command -v qemu-system-i386 2>/dev/null || find /usr/local /opt/homebrew -name qemu-system-i386 2>/dev/null | head -1 || echo qemu-system-i386)
 
 run: $(ISO_FILE)
 	@echo "Starting QEMU..."
-	@if [ ! -f "$(ISO_FILE)" ]; then \
+	@if [ ! -f JoshOS.iso ]; then \
 		echo "Error: ISO file not found. Run 'make' first."; \
 		exit 1; \
 	fi
-	$(QEMU) -cdrom $(ISO_FILE) -m 128M
+	$(QEMU) -cdrom JoshOS.iso -m 128M
 
 # Clean build artifacts
 clean:
 	@echo "Cleaning..."
 	rm -rf $(BUILD_DIR)
-	rm -rf $(ISO_DIR)/boot
+	rm -rf $(ISO_DIR)/boot/kernel.bin
 	rm -f $(ISO_FILE)
+	@mkdir -p $(ISO_DIR)/boot/grub
+	@printf 'menuentry "NEBULA OS" {\n    multiboot /boot/kernel.bin\n    boot\n}\n' > $(ISO_DIR)/boot/grub/grub.cfg
 
 # Phony targets (not files)
 .PHONY: all run clean

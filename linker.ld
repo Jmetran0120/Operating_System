@@ -14,12 +14,15 @@ SECTIONS
     . = 1M;
 
     /* Multiboot header must be in first 8KB of kernel */
-    .multiboot : {
+    /* Place it at the very beginning - GRUB will find it here */
+    /* This MUST be in a LOAD segment for GRUB to find it */
+    .multiboot : ALIGN(4) {
         *(.multiboot)          /* Include multiboot header from boot.S */
     }
 
-    /* Text section - executable code */
-    .text : {
+    /* Text section - executable code - starts right after multiboot */
+    /* Combined with multiboot to ensure they're in same LOAD segment */
+    .text : ALIGN(4) {
         *(.text)               /* All .text sections from all files */
     }
 

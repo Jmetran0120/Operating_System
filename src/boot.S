@@ -10,7 +10,8 @@
 .set CHECKSUM, -(MAGIC + FLAGS) /* Checksum ensures magic + flags + checksum = 0 */
 
 /* Multiboot header section - GRUB looks for this */
-.section .multiboot
+/* Must be in a LOAD segment and within first 8KB */
+.section .multiboot, "a"       /* 'a' flag means allocatable (in LOAD segment) */
     .align 4                   /* Align to 4-byte boundary */
     .long MAGIC                /* Magic number */
     .long FLAGS                /* Flags */
