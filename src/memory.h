@@ -4,7 +4,14 @@
 #define MEMORY_H
 
 /* Standard integer types */
-typedef unsigned int uint32_t;
+typedef unsigned char      uint8_t;
+typedef unsigned int       uint32_t;
+typedef unsigned long long uintptr_t;  /* Pointer-sized unsigned integer */
+
+/* NULL pointer definition */
+#ifndef NULL
+#define NULL ((void*)0)
+#endif
 
 /* Initialize memory manager */
 void memory_init(void);

@@ -9,6 +9,13 @@
 #include "keyboard.h"
 #include "memory.h"
 
+/* Standard integer types - must be defined before use */
+typedef unsigned char      uint8_t;
+typedef unsigned short     uint16_t;
+typedef unsigned int       uint32_t;
+typedef unsigned long long uint64_t;
+typedef uint32_t           size_t;
+
 /* VGA text mode constants */
 #define VGA_WIDTH  80          /* VGA text mode width: 80 characters */
 #define VGA_HEIGHT 25          /* VGA text mode height: 25 lines */
@@ -119,13 +126,6 @@ void terminal_writestring(const char* data) {
     }
     terminal_write(data, size); /* Write the string */
 }
-
-/* Standard integer types */
-typedef unsigned char      uint8_t;
-typedef unsigned short     uint16_t;
-typedef unsigned int       uint32_t;
-typedef unsigned long long uint64_t;
-typedef uint32_t           size_t;
 
 /* Helper function to convert integer to string */
 static void int_to_string(uint32_t num, char* buffer) {

@@ -56,14 +56,6 @@ uint8_t keyboard_has_data(void) {
     return (status & KEYBOARD_STATUS_OUTPUT_FULL) != 0;
 }
 
-/* Wait for keyboard to be ready */
-static void keyboard_wait(void) {
-    /* Wait until keyboard is ready (input buffer not full) */
-    while (inb(KEYBOARD_STATUS_PORT) & KEYBOARD_STATUS_INPUT_FULL) {
-        /* Busy wait */
-    }
-}
-
 /* Get the next key press (blocking) */
 char keyboard_getchar(void) {
     /* Wait until keyboard has data */

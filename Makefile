@@ -3,11 +3,35 @@
 # Builds the operating system from source files into a bootable ISO.
 # Usage: make (builds ISO), make run (builds and runs in QEMU), make clean
 
+# Suppress implicit rules to prevent conflicts
+.SUFFIXES:
+
 # Compiler and tools
-CC = gcc                           # C compiler
-AS = as                            # Assembler
-LD = ld                            # Linker
-GRUB_MKRESCUE = grub-mkrescue      # GRUB ISO creation tool
+# On macOS, install cross-compiler: brew install i686-elf-gcc i686-elf-binutils
+# Then use: CC=i686-elf-gcc AS=i686-elf-as LD=i686-elf-ld make
+CC ?= gcc                          # C compiler (use i686-elf-gcc on macOS)
+AS ?= as                           # Assembler (use i686-elf-as on macOS)
+LD ?= ld                           # Linker (use i686-elf-ld on macOS)
+# GRUB tool - try i686-elf-grub-mkrescue first (for macOS), fallback to grub-mkrescue
+GRUB_MKRESCUE ?= $(shell command -v i686-elf-grub-mkrescue 2>/dev/null || command -v grub-mkrescue 2>/dev/null || echo grub-mkrescue)
+
+# Check if tools exist (basic check)
+CHECK_CC := $(shell command -v $(CC) 2>/dev/null)
+CHECK_AS := $(shell command -v $(AS) 2>/dev/null)
+CHECK_LD := $(shell command -v $(LD) 2>/dev/null)
+
+# Warn if tools not found (only check on first run, not on every invocation)
+ifeq ($(MAKELEVEL),0)
+ifndef CHECK_CC
+$(warning WARNING: $(CC) not found in PATH. Install with: brew install i686-elf-gcc)
+endif
+ifndef CHECK_AS
+$(warning WARNING: $(AS) not found in PATH. Install with: brew install i686-elf-binutils)
+endif
+ifndef CHECK_LD
+$(warning WARNING: $(LD) not found in PATH. Install with: brew install i686-elf-binutils)
+endif
+endif
 
 # Compiler flags
 CFLAGS = -m32                      # 32-bit mode
@@ -23,7 +47,13 @@ CFLAGS += -fno-pic                 # No position-independent code
 CFLAGS += -fno-pie                 # No position-independent executable
 
 # Assembler flags
-ASFLAGS = --32                     # 32-bit mode
+# Note: x86_64-elf-as doesn't support --32 flag (it's for 64-bit)
+# For 32-bit OS, you MUST use i686-elf toolchain: brew install i686-elf-gcc i686-elf-binutils
+# Check if we're using x86_64-elf-as (which doesn't work for 32-bit)
+ifeq ($(findstring x86_64-elf-as,$(AS)),x86_64-elf-as)
+$(error ERROR: x86_64-elf-as cannot assemble 32-bit code. Please install i686-elf toolchain: brew install i686-elf-gcc i686-elf-binutils)
+endif
+ASFLAGS = --32                     # 32-bit mode (requires i686-elf-as or native as)
 
 # Linker flags
 LDFLAGS = -m elf_i386              # 32-bit ELF format
@@ -31,21 +61,21 @@ LDFLAGS += -T linker.ld            # Use our linker script
 LDFLAGS += -nostdlib               # No standard library
 
 # Directories
-SRC_DIR = src                      # Source directory
-ISO_DIR = iso                      # ISO directory
-BUILD_DIR = build                  # Build directory
+SRC_DIR := src
+ISO_DIR := iso
+BUILD_DIR := build
 
 # Source files
-BOOT_SRC = $(SRC_DIR)/boot.S         # Bootloader source
-KERNEL_SRC = $(SRC_DIR)/kernel.c     # Kernel source
-KEYBOARD_SRC = $(SRC_DIR)/keyboard.c # Keyboard driver source
-MEMORY_SRC = $(SRC_DIR)/memory.c     # Memory manager source
+BOOT_SRC := $(SRC_DIR)/boot.S
+KERNEL_SRC := $(SRC_DIR)/kernel.c
+KEYBOARD_SRC := $(SRC_DIR)/keyboard.c
+MEMORY_SRC := $(SRC_DIR)/memory.c
 
 # Object files
-BOOT_OBJ = $(BUILD_DIR)/boot.o       # Bootloader object
-KERNEL_OBJ = $(BUILD_DIR)/kernel.o   # Kernel object
-KEYBOARD_OBJ = $(BUILD_DIR)/keyboard.o # Keyboard driver object
-MEMORY_OBJ = $(BUILD_DIR)/memory.o   # Memory manager object
+BOOT_OBJ := $(BUILD_DIR)/boot.o
+KERNEL_OBJ := $(BUILD_DIR)/kernel.o
+KEYBOARD_OBJ := $(BUILD_DIR)/keyboard.o
+MEMORY_OBJ := $(BUILD_DIR)/memory.o
 
 # Output files
 KERNEL_BIN = $(ISO_DIR)/boot/kernel.bin  # Kernel binary
@@ -72,33 +102,40 @@ $(BUILD_DIR)/kernel.bin: $(BOOT_OBJ) $(KERNEL_OBJ) $(KEYBOARD_OBJ) $(MEMORY_OBJ)
 	$(LD) $(LDFLAGS) -o $(BUILD_DIR)/kernel.bin $(BOOT_OBJ) $(KERNEL_OBJ) $(KEYBOARD_OBJ) $(MEMORY_OBJ)
 
 # Compile bootloader
-$(BOOT_OBJ): $(BOOT_SRC)
+$(BUILD_DIR)/boot.o: $(SRC_DIR)/boot.S
 	@echo "Assembling bootloader..."
 	@mkdir -p $(BUILD_DIR)
-	$(AS) $(ASFLAGS) -o $(BOOT_OBJ) $(BOOT_SRC)
+	$(AS) $(ASFLAGS) -o $(BUILD_DIR)/boot.o $(SRC_DIR)/boot.S
 
 # Compile kernel
-$(KERNEL_OBJ): $(KERNEL_SRC)
+$(BUILD_DIR)/kernel.o: $(SRC_DIR)/kernel.c
 	@echo "Compiling kernel..."
 	@mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(SRC_DIR) -c -o $(KERNEL_OBJ) $(KERNEL_SRC)
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -c -o $(BUILD_DIR)/kernel.o $(SRC_DIR)/kernel.c
 
 # Compile keyboard driver
-$(KEYBOARD_OBJ): $(KEYBOARD_SRC)
+$(BUILD_DIR)/keyboard.o: $(SRC_DIR)/keyboard.c
 	@echo "Compiling keyboard driver..."
 	@mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(SRC_DIR) -c -o $(KEYBOARD_OBJ) $(KEYBOARD_SRC)
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -c -o $(BUILD_DIR)/keyboard.o $(SRC_DIR)/keyboard.c
 
 # Compile memory manager
-$(MEMORY_OBJ): $(MEMORY_SRC)
+$(BUILD_DIR)/memory.o: $(SRC_DIR)/memory.c
 	@echo "Compiling memory manager..."
 	@mkdir -p $(BUILD_DIR)
-	$(CC) $(CFLAGS) -I$(SRC_DIR) -c -o $(MEMORY_OBJ) $(MEMORY_SRC)
+	$(CC) $(CFLAGS) -I$(SRC_DIR) -c -o $(BUILD_DIR)/memory.o $(SRC_DIR)/memory.c
 
 # Run in QEMU
+# Try to find qemu-system-i386 in common locations
+QEMU := $(shell command -v qemu-system-i386 2>/dev/null || find /usr/local /opt/homebrew -name qemu-system-i386 2>/dev/null | head -1 || echo qemu-system-i386)
+
 run: $(ISO_FILE)
 	@echo "Starting QEMU..."
-	qemu-system-i386 -cdrom $(ISO_FILE)
+	@if [ ! -f "$(ISO_FILE)" ]; then \
+		echo "Error: ISO file not found. Run 'make' first."; \
+		exit 1; \
+	fi
+	$(QEMU) -cdrom $(ISO_FILE) -m 128M
 
 # Clean build artifacts
 clean:
@@ -109,4 +146,3 @@ clean:
 
 # Phony targets (not files)
 .PHONY: all run clean
-

@@ -63,15 +63,17 @@ On macOS, install required tools:
 # Install required packages
 brew install qemu
 brew install xorriso
-brew install grub
+brew install i686-elf-grub
+
+# Install cross-compiler toolchain (REQUIRED for macOS)
+# IMPORTANT: Use i686-elf (32-bit), NOT x86_64-elf (64-bit)
+brew install i686-elf-gcc i686-elf-binutils
 ```
 
-**Note**: On macOS, you may need to install GRUB from source or use a different bootloader approach. Alternatively, you can use `xorriso` and `grub-pc-bin` via a Linux VM or Docker.
-
-For macOS specifically, you might want to use a cross-compiler:
-```bash
-brew install x86_64-elf-gcc x86_64-elf-binutils
-```
+**Important**: 
+- macOS native `gcc`/`as`/`ld` don't support 32-bit ELF binaries
+- You **must** use `i686-elf` toolchain (32-bit), **NOT** `x86_64-elf` (64-bit)
+- `x86_64-elf-as` cannot assemble 32-bit code and will fail
 
 ## Build Instructions
 
@@ -79,6 +81,20 @@ brew install x86_64-elf-gcc x86_64-elf-binutils
 Follow the prerequisites section above.
 
 ### Step 2: Build the OS
+
+**On macOS** (use cross-compilers):
+```bash
+cd /Users/joshmetran/Desktop/Operating_System
+CC=i686-elf-gcc AS=i686-elf-as LD=i686-elf-ld make
+```
+
+Or if installed and in PATH, just:
+```bash
+make
+```
+(The Makefile uses `?=` so you can override with environment variables)
+
+**On Linux** (native tools):
 ```bash
 cd /Users/joshmetran/Desktop/Operating_System
 make

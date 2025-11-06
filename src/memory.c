@@ -84,8 +84,11 @@ void kfree(void* ptr) {
     /* Get block header (before data area) */
     MemoryBlock* block = (MemoryBlock*)((uint8_t*)ptr - sizeof(MemoryBlock));
     
-    /* Check if pointer is valid */
-    if ((uint32_t)block < HEAP_START || (uint32_t)block >= HEAP_END) {
+    /* Check if pointer is valid - use uintptr_t for safe pointer comparison */
+    /* Cast to void* first to avoid pointer-to-int cast warning on some compilers */
+    void* block_ptr = (void*)block;
+    uintptr_t addr = (uintptr_t)block_ptr;
+    if (addr < (uintptr_t)HEAP_START || addr >= (uintptr_t)HEAP_END) {
         return;                           /* Invalid pointer */
     }
     
